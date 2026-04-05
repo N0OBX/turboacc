@@ -1,7 +1,4 @@
 #!/bin/sh /etc/rc.common
-# Copyright (C) 2023 沉默の金 <cmzj11@gmail.com>
-# Copyright (C) 2022 Lean <coolsnowwolf@gmail.com>
-# Copyright (C) 2019-2021 Tianling Shen <cnsztl@immortalwrt.org>
 
 START=90
 STOP=10
@@ -16,25 +13,12 @@ inital_conf(){
 	config_get "hw_wed" "config" "hw_wed" "0"
 	config_get "hw_flow" "config" "hw_flow" "0"
 	config_get "sw_flow" "config" "sw_flow" "0"
-	config_get "sfe_flow" "config" "sfe_flow" "0"
 	config_get "bbr_cca" "config" "bbr_cca" "0"
 	config_get "fullcone_nat" "config" "fullcone_nat" "0"
 	config_get "fullcone6" "config" "fullcone6" "0"
 
 	[ ! -e "/lib/modules/$(uname -r)/nft_flow_offload.ko" ] && { sw_flow="0"; hw_flow="0"; }
 	[ ! -e "/lib/modules/$(uname -r)/tcp_bbr.ko" ] && bbr_cca="0"
-}
-
-load_sfe() {
-	local kernel_version=$(uname -r)
-
-	[ -e "/lib/modules/$kernel_version/shortcut-fe-cm.ko" ] && modprobe shortcut-fe-cm
-	[ -e "/lib/modules/$kernel_version/fast-classifier.ko" ] && modprobe fast-classifier
-}
-
-unload_sfe() {
-	[ -d /sys/module/shortcut_fe_cm ] && rmmod shortcut_fe_cm
-	[ -d /sys/module/fast_classifier ] && rmmod fast_classifier
 }
 
 load_wed() {
@@ -65,20 +49,16 @@ start(){
 	uci set firewall.@defaults[0].flow_offloading="${sw_flow}"
 	uci set firewall.@defaults[0].flow_offloading_hw="${hw_flow}"
 	uci set firewall.@defaults[0].fullcone="${fullcone_nat}"
-	for i in $(uci show firewall|grep "^firewall.@zone\[[0-9]*\]\.fullcone6" |sed  "s/=.*//g"); do
-      uci set "$i"="${fullcone6}"
-    done
+	for i in $(uci show firewall | grep "^firewall.@zone\[[0-9]*\]\.fullcone6" | sed "s/=.*//g"); do
+		uci set "$i"="${fullcone6}"
+	done
 	uci commit firewall
 
-	[ "${sw_flow}" -ne "1" ] && [ "${sfe_flow}" -eq "1" ] && {
-		load_sfe
-	}
-	
 	[ "${hw_flow}" -eq "1" ] && [ "${hw_wed}" -eq "1" ] && {
 		load_wed
 	}
 
-	if [ "${bbr_cca}" -eq "1" ];  then
+	if [ "${bbr_cca}" -eq "1" ]; then
 		sysctl -w net.ipv4.tcp_congestion_control="bbr"
 	else
 		sysctl -w net.ipv4.tcp_congestion_control="cubic"
@@ -97,16 +77,14 @@ stop(){
 	uci set firewall.@defaults[0].flow_offloading="${sw_flow}"
 	uci set firewall.@defaults[0].flow_offloading_hw="${hw_flow}"
 	uci set firewall.@defaults[0].fullcone="${fullcone_nat}"
-	for i in $(uci show firewall|grep "^firewall.@zone\[[0-9]*\]\.fullcone6" |sed  "s/=.*//g"); do
-      uci set "$i"="${fullcone6}"
-    done
+	for i in $(uci show firewall | grep "^firewall.@zone\[[0-9]*\]\.fullcone6" | sed "s/=.*//g"); do
+		uci set "$i"="${fullcone6}"
+	done
 	uci commit firewall
 
 	[ "${hw_wed}" -eq "0" ] && {
 		unload_wed
 	}
-
-	unload_sfe
 
 	if [ "${restart_utils}" = "true" ]; then
 		echo "DNSMASQ revert"
@@ -142,19 +120,13 @@ check_status(){
 		elif [ -d /sys/kernel/debug/ecm/ecm_sfe_ipv4 ]; then
 			msg="QCA-ECM-SFE"
 			exit_code=0
-		elif [ -d /sys/module/fast_classifier ]; then
-			msg="Shortcut-FE"
-			exit_code=0
-		elif [ -d /sys/module/shortcut_fe_cm ]; then
-			msg="Shortcut-FE ECM"
-			exit_code=0
 		else
 			msg=""
 			exit_code=1
 		fi
 		;;
 	"fullconenat")
-    	if [ "$(cat "/sys/module/nft_fullcone/refcnt" 2>"/dev/null" || echo -1)" -gt "0" ]; then
+		if [ "$(cat "/sys/module/nft_fullcone/refcnt" 2>"/dev/null" || echo -1)" -gt "0" ]; then
 			exit_code=0
 		else
 			exit_code=1
@@ -168,8 +140,9 @@ check_status(){
 		exit 2
 		;;
 	esac
+
 	if [ "$msg" != "" ] && { [ $# = 1 ] || { [ $# = 2 ] && [ "$2" = 1 ]; }; }; then
-    	echo -n "$msg"
+		echo -n "$msg"
 	fi
 	exit "$exit_code"
 }
